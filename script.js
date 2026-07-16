@@ -28,11 +28,20 @@ const player = {
     lastJumpTime: 0,
     doubleJumpTimeout: 200,
     animationFrame: 0,
-    animationTimer: 0
+    animationTimer: 0,
+    invincible: false,
+    superJump: false
 };
 
-// Obstacles array
+// Obstacles and power-ups arrays
 let obstacles = [];
+let powerUps = [];
+
+let highScore = Number(localStorage.getItem('runningGameHighScore') || 0);
+const activePower = {
+    type: null,
+    endTime: 0
+};
 
 // Input handling
 const keys = {};
@@ -123,6 +132,40 @@ class Obstacle {
     }
 }
 
+class PowerUp {
+    constructor() {
+        this.type = Math.random() < 0.5 ? 'highJump' : 'invincible';
+        this.width = 24;
+        this.height = 24;
+        this.x = canvas.width + Math.random() * 220;
+        this.y = player.groundLevel - this.height - getRandomInt(10, 80);
+        this.color = this.type === 'highJump' ? '#ffc107' : '#4b9bff';
+        this.scored = false;
+    }
+
+    update() {
+        this.x -= currentSpeed;
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.strokeStyle = '#222222';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.type === 'highJump' ? '^' : 'O', this.x + this.width / 2, this.y + this.height / 2);
+    }
+
+    isOffScreen() {
+        return this.x + this.width < 0;
+    }
+}
+
 // Utility: random integer between min and max
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -139,7 +182,11 @@ function checkCollision(rect1, rect2) {
 // Update score and speed
 function updateScore(points) {
     score += points;
-    document.getElementById('score').textContent = score;
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('runningGameHighScore', String(highScore));
+    }
+    updateHud();
     
     // Increase speed every 5 points
     if (score % 5 === 0) {
@@ -148,7 +195,19 @@ function updateScore(points) {
     }
 }
 
-// Spawn obstacles
+function updateHud() {
+    document.getElementById('score').textContent = score;
+    document.getElementById('highScore').textContent = highScore;
+
+    if (activePower.type && Date.now() < activePower.endTime) {
+        const remaining = Math.ceil((activePower.endTime - Date.now()) / 1000);
+        const label = activePower.type === 'highJump' ? 'Super Jump' : 'Invincible';
+        document.getElementById('activePower').textContent = `${label} (${remaining}s)`;
+    } else {
+        document.getElementById('activePower').textContent = 'None';
+    }
+}
+
 function spawnObstacle() {
     if (obstacles.length >= 3) return;
     obstacles.push(new Obstacle());
@@ -158,6 +217,34 @@ let spawnTimer = 0;
 const spawnIntervalMin = 70;
 const spawnIntervalMax = 140;
 let nextSpawnInterval = getRandomInt(spawnIntervalMin, spawnIntervalMax);
+
+let powerUpTimer = 0;
+const powerUpIntervalMin = 240;
+const powerUpIntervalMax = 380;
+let nextPowerUpInterval = getRandomInt(powerUpIntervalMin, powerUpIntervalMax);
+
+function activatePowerUp(powerUp) {
+    activePower.type = powerUp.type;
+    activePower.endTime = Date.now() + 10000;
+    if (powerUp.type === 'highJump') {
+        player.superJump = true;
+        player.jumpPower = 24;
+        player.maxJumpPower = 24;
+    } else if (powerUp.type === 'invincible') {
+        player.invincible = true;
+    }
+    updateHud();
+}
+
+function deactivatePowerUp() {
+    activePower.type = null;
+    activePower.endTime = 0;
+    player.superJump = false;
+    player.invincible = false;
+    player.jumpPower = 12;
+    player.maxJumpPower = player.isShiftPressed ? 18 : 12;
+    updateHud();
+}
 
 // Main update function
 function update() {
@@ -169,6 +256,21 @@ function update() {
         spawnObstacle();
         spawnTimer = 0;
         nextSpawnInterval = getRandomInt(spawnIntervalMin, spawnIntervalMax);
+    }
+
+    // Spawn power-ups around the map
+    powerUpTimer++;
+    if (powerUpTimer > nextPowerUpInterval) {
+        if (powerUps.length < 2) {
+            powerUps.push(new PowerUp());
+        }
+        powerUpTimer = 0;
+        nextPowerUpInterval = getRandomInt(powerUpIntervalMin, powerUpIntervalMax);
+    }
+
+    // Expire active power-up
+    if (activePower.type && Date.now() > activePower.endTime) {
+        deactivatePowerUp();
     }
 
     // Update player
@@ -201,7 +303,7 @@ function update() {
         }
 
         // Check collision
-        if (checkCollision(player, {
+        if (!player.invincible && checkCollision(player, {
             x: obstacles[i].x,
             y: obstacles[i].y - obstacles[i].height,
             width: obstacles[i].width,
@@ -238,6 +340,26 @@ function draw() {
     ctx.moveTo(0, player.groundLevel);
     ctx.lineTo(canvas.width, player.groundLevel);
     ctx.stroke();
+
+    // Update power-ups
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+        powerUps[i].update();
+
+        if (checkCollision(player, {
+            x: powerUps[i].x,
+            y: powerUps[i].y,
+            width: powerUps[i].width,
+            height: powerUps[i].height
+        })) {
+            activatePowerUp(powerUps[i]);
+            powerUps.splice(i, 1);
+            continue;
+        }
+
+        if (powerUps[i].isOffScreen()) {
+            powerUps.splice(i, 1);
+        }
+    }
 
     // Draw player
     const runnerX = player.x + 2;
@@ -309,6 +431,9 @@ function draw() {
 
     ctx.restore();
 
+    // Draw power-ups
+    powerUps.forEach(powerUp => powerUp.draw());
+
     // Draw obstacles
     obstacles.forEach(obstacle => obstacle.draw());
 }
@@ -325,5 +450,5 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Start game
-gameLoop();
+updateHud();
+
