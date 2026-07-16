@@ -26,7 +26,9 @@ const player = {
     maxJumpPower: 12,
     isShiftPressed: false,
     lastJumpTime: 0,
-    doubleJumpTimeout: 200
+    doubleJumpTimeout: 200,
+    animationFrame: 0,
+    animationTimer: 0
 };
 
 // Obstacles array
@@ -185,6 +187,13 @@ function update() {
         player.canDoubleJump = false;
     }
 
+    // Animate the runner
+    player.animationTimer++;
+    if (player.animationTimer > 5) {
+        player.animationFrame = (player.animationFrame + 1) % 2;
+        player.animationTimer = 0;
+    }
+
     // Update obstacles
     for (let i = obstacles.length - 1; i >= 0; i--) {
         obstacles[i].update();
@@ -235,17 +244,70 @@ function draw() {
     ctx.stroke();
 
     // Draw player
-    ctx.fillStyle = '#4169E1';
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    const runnerX = player.x + 2;
+    const runnerY = player.y + 4;
+    const bobOffset = player.jumping ? -3 : (player.animationFrame === 0 ? -2 : 2);
+    const strideOffset = player.jumping ? 0 : (player.animationFrame === 0 ? -7 : 7);
 
-    // Draw player eyes
-    ctx.fillStyle = 'white';
-    ctx.fillRect(player.x + 8, player.y + 10, 6, 8);
-    ctx.fillRect(player.x + 16, player.y + 10, 6, 8);
+    ctx.save();
+    ctx.translate(runnerX, runnerY + bobOffset);
 
-    ctx.fillStyle = 'black';
-    ctx.fillRect(player.x + 9, player.y + 12, 4, 4);
-    ctx.fillRect(player.x + 17, player.y + 12, 4, 4);
+    ctx.fillStyle = '#f4b183';
+    ctx.beginPath();
+    ctx.arc(14, 8, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#d9534f';
+    ctx.fillRect(10, 15, 8, 16);
+
+    ctx.fillStyle = '#f4b183';
+    ctx.beginPath();
+    ctx.arc(14, 8, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(11.5, 7.5, 1.2, 0, Math.PI * 2);
+    ctx.arc(16.5, 7.5, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(11.5, 7.5, 0.6, 0, Math.PI * 2);
+    ctx.arc(16.5, 7.5, 0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#333333';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(14, 10.5, 3.5, 0.15, 0.95 * Math.PI);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#2d6cdf';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(14, 18);
+    ctx.lineTo(6, 24);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(14, 18);
+    ctx.lineTo(22, 24);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(14, 31);
+    ctx.lineTo(8 + strideOffset, 42);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(14, 31);
+    ctx.lineTo(20 - strideOffset, 42);
+    ctx.stroke();
+
+    ctx.restore();
 
     // Draw obstacles
     obstacles.forEach(obstacle => obstacle.draw());
