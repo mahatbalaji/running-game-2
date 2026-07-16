@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Running Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="hud">
+            <div class="score">Score: <span id="score">0</span></div>
+            <div class="speed">Speed: <span id="speed">1.0</span>x</div>
+        </div>
+        <div class="instructions">
+            ↑ or SPACE: Jump | E: Double Jump | SHIFT + Jump: Higher Jump
+        </div>
+        <div class="game-over" id="gameOverScreen">
+            <h1>GAME OVER</h1>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <button onclick="location.reload()">Play Again</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
