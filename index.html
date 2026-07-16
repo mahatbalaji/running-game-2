@@ -4,7 +4,113 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Running Game</title>
-    <link rel="stylesheet" href="styles.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: Arial, sans-serif;
+        }
+
+        .game-container {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
+            border: 3px solid #333;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #333;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        .score,
+        .high-score,
+        .speed,
+        .power {
+            margin-bottom: 6px;
+        }
+
+        .speed,
+        .power {
+            font-size: 16px;
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 20;
+            display: none;
+            font-size: 24px;
+        }
+
+        .game-over h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+
+        .game-over p {
+            margin: 10px 0;
+        }
+
+        .game-over button {
+            margin-top: 20px;
+            padding: 10px 30px;
+            font-size: 18px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .game-over button:hover {
+            background: #764ba2;
+        }
+
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #333;
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 8px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+    </style>
 </head>
 <body>
     <div class="game-container">
@@ -25,6 +131,387 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 800;
+        canvas.height = 400;
+
+        // Game states
+        let gameRunning = true;
+        let score = 0;
+        let baseSpeed = 6;
+        let currentSpeed = baseSpeed;
+
+        // Player object
+        const player = {
+            x: 50,
+            y: 0,
+            width: 30,
+            height: 40,
+            velocityY: 0,
+            jumping: false,
+            jumpCount: 0,
+            maxJumps: 1,
+            canDoubleJump: false,
+            groundLevel: canvas.height - 60,
+            jumpPower: 12,
+            maxJumpPower: 12,
+            isShiftPressed: false,
+            lastJumpTime: 0,
+            doubleJumpTimeout: 200,
+            animationFrame: 0,
+            animationTimer: 0,
+            invincible: false,
+            superJump: false
+        };
+
+        // Obstacles and power-ups arrays
+        let obstacles = [];
+        let powerUps = [];
+
+        let highScore = Number(localStorage.getItem('runningGameHighScore') || 0);
+        const activePower = {
+            type: null,
+            endTime: 0
+        };
+
+        // Input handling
+        const keys = {};
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+
+            if (e.key === 'Shift') {
+                player.isShiftPressed = true;
+                player.maxJumpPower = 18;
+            }
+
+            if ((e.key === 'ArrowUp' || e.key === ' ') && gameRunning) {
+                e.preventDefault();
+                const currentTime = Date.now();
+
+                if (player.jumpCount === 0 && !player.jumping) {
+                    player.jumping = true;
+                    player.jumpCount = 1;
+                    player.velocityY = -player.jumpPower;
+                    player.lastJumpTime = currentTime;
+                    player.canDoubleJump = true;
+                } else if (player.canDoubleJump && player.jumpCount === 1) {
+                    player.jumpCount = 2;
+                    player.velocityY = -player.maxJumpPower * 0.8;
+                    player.canDoubleJump = false;
+                }
+            }
+
+            if (e.key === 'e' && gameRunning && player.jumpCount === 1) {
+                const currentTime = Date.now();
+                if (currentTime - player.lastJumpTime < player.doubleJumpTimeout) {
+                    player.jumpCount = 2;
+                    player.velocityY = -player.maxJumpPower * 0.8;
+                    player.canDoubleJump = false;
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+
+            if (e.key === 'Shift') {
+                player.isShiftPressed = false;
+                player.maxJumpPower = player.maxJumpPower === 18 ? 12 : player.maxJumpPower;
+                player.jumpPower = 12;
+            }
+        });
+
+        class Obstacle {
+            constructor() {
+                this.x = canvas.width + Math.random() * 200;
+                this.y = canvas.height - 60;
+                this.width = getRandomInt(18, 48);
+                this.height = getRandomInt(20, 58);
+                const palette = ['#929090', '#afbd1785', '#ff4444', '#ff0303', '#0d1955', '#23e48d'];
+                this.color = palette[Math.floor(Math.random() * palette.length)];
+                this.scored = false;
+            }
+
+            update() {
+                this.x -= currentSpeed;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y - this.height, this.width, this.height);
+                ctx.strokeStyle = '#cc0000';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, this.y - this.height, this.width, this.height);
+            }
+
+            isOffScreen() {
+                return this.x + this.width < 0;
+            }
+        }
+
+        class PowerUp {
+            constructor() {
+                this.type = Math.random() < 0.5 ? 'highJump' : 'invincible';
+                this.width = 24;
+                this.height = 24;
+                this.x = canvas.width + Math.random() * 220;
+                this.y = player.groundLevel - this.height - getRandomInt(10, 80);
+                this.color = this.type === 'highJump' ? '#ffc107' : '#4b9bff';
+                this.scored = false;
+            }
+
+            update() {
+                this.x -= currentSpeed;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.strokeStyle = '#222222';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.type === 'highJump' ? '^' : 'O', this.x + this.width / 2, this.y + this.height / 2);
+            }
+
+            isOffScreen() {
+                return this.x + this.width < 0;
+            }
+        }
+
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function updateScore(points) {
+            score += points;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('runningGameHighScore', String(highScore));
+            }
+            updateHud();
+            if (score % 5 === 0) {
+                currentSpeed = baseSpeed + (score / 5) * 1.5;
+                document.getElementById('speed').textContent = (currentSpeed / baseSpeed).toFixed(2);
+            }
+        }
+
+        function updateHud() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('highScore').textContent = highScore;
+            if (activePower.type && Date.now() < activePower.endTime) {
+                const remaining = Math.ceil((activePower.endTime - Date.now()) / 1000);
+                const label = activePower.type === 'highJump' ? 'Super Jump' : 'Invincible';
+                document.getElementById('activePower').textContent = `${label} (${remaining}s)`;
+            } else {
+                document.getElementById('activePower').textContent = 'None';
+            }
+        }
+
+        function spawnObstacle() {
+            if (obstacles.length >= 3) return;
+            obstacles.push(new Obstacle());
+        }
+
+        let spawnTimer = 0;
+        const spawnIntervalMin = 70;
+        const spawnIntervalMax = 140;
+        let nextSpawnInterval = getRandomInt(spawnIntervalMin, spawnIntervalMax);
+        let powerUpTimer = 0;
+        const powerUpIntervalMin = 240;
+        const powerUpIntervalMax = 380;
+        let nextPowerUpInterval = getRandomInt(powerUpIntervalMin, powerUpIntervalMax);
+
+        function activatePowerUp(powerUp) {
+            activePower.type = powerUp.type;
+            activePower.endTime = Date.now() + 10000;
+            if (powerUp.type === 'highJump') {
+                player.superJump = true;
+                player.jumpPower = 24;
+                player.maxJumpPower = 24;
+            } else if (powerUp.type === 'invincible') {
+                player.invincible = true;
+            }
+            updateHud();
+        }
+
+        function deactivatePowerUp() {
+            activePower.type = null;
+            activePower.endTime = 0;
+            player.superJump = false;
+            player.invincible = false;
+            player.jumpPower = 12;
+            player.maxJumpPower = player.isShiftPressed ? 18 : 12;
+            updateHud();
+        }
+
+        function update() {
+            if (!gameRunning) return;
+            spawnTimer++;
+            if (spawnTimer > nextSpawnInterval) {
+                spawnObstacle();
+                spawnTimer = 0;
+                nextSpawnInterval = getRandomInt(spawnIntervalMin, spawnIntervalMax);
+            }
+            powerUpTimer++;
+            if (powerUpTimer > nextPowerUpInterval) {
+                if (powerUps.length < 2) {
+                    powerUps.push(new PowerUp());
+                }
+                powerUpTimer = 0;
+                nextPowerUpInterval = getRandomInt(powerUpIntervalMin, powerUpIntervalMax);
+            }
+            if (activePower.type && Date.now() > activePower.endTime) {
+                deactivatePowerUp();
+            }
+            player.velocityY += 0.6;
+            player.y += player.velocityY;
+            if (player.y + player.height >= player.groundLevel) {
+                player.y = player.groundLevel - player.height;
+                player.jumping = false;
+                player.jumpCount = 0;
+                player.canDoubleJump = false;
+            }
+            player.animationTimer++;
+            if (player.animationTimer > 5) {
+                player.animationFrame = (player.animationFrame + 1) % 2;
+                player.animationTimer = 0;
+            }
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update();
+                if (!obstacles[i].scored && obstacles[i].x + obstacles[i].width < player.x) {
+                    obstacles[i].scored = true;
+                    updateScore(1);
+                }
+                if (!player.invincible && checkCollision(player, {
+                    x: obstacles[i].x,
+                    y: obstacles[i].y - obstacles[i].height,
+                    width: obstacles[i].width,
+                    height: obstacles[i].height
+                })) {
+                    gameRunning = false;
+                    showGameOver();
+                }
+                if (obstacles[i].isOffScreen()) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        function draw() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#E0F6FF');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#90EE90';
+            ctx.fillRect(0, player.groundLevel, canvas.width, canvas.height - player.groundLevel);
+            ctx.strokeStyle = '#228B22';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, player.groundLevel);
+            ctx.lineTo(canvas.width, player.groundLevel);
+            ctx.stroke();
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                powerUps[i].update();
+                if (checkCollision(player, {
+                    x: powerUps[i].x,
+                    y: powerUps[i].y,
+                    width: powerUps[i].width,
+                    height: powerUps[i].height
+                })) {
+                    activatePowerUp(powerUps[i]);
+                    powerUps.splice(i, 1);
+                    continue;
+                }
+                if (powerUps[i].isOffScreen()) {
+                    powerUps.splice(i, 1);
+                }
+            }
+            const runnerX = player.x + 2;
+            const runnerY = player.y + 4;
+            const bobOffset = player.jumping ? -3 : (player.animationFrame === 0 ? -2 : 2);
+            const strideOffset = player.jumping ? 0 : (player.animationFrame === 0 ? -7 : 7);
+            ctx.save();
+            ctx.translate(runnerX, runnerY + bobOffset);
+            ctx.fillStyle = '#f4b183';
+            ctx.beginPath();
+            ctx.arc(14, 8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#d9534f';
+            ctx.fillRect(10, 15, 8, 16);
+            ctx.fillStyle = '#f4b183';
+            ctx.beginPath();
+            ctx.arc(14, 8, 7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(11.5, 7.5, 1.2, 0, Math.PI * 2);
+            ctx.arc(16.5, 7.5, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(11.5, 7.5, 0.6, 0, Math.PI * 2);
+            ctx.arc(16.5, 7.5, 0.6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(14, 10.5, 3.5, 0.15, 0.95 * Math.PI);
+            ctx.stroke();
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#f4b183';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(14, 18);
+            ctx.lineTo(6, 24);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(14, 18);
+            ctx.lineTo(22, 24);
+            ctx.stroke();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(14, 31);
+            ctx.lineTo(8 + strideOffset, 46);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(14, 31);
+            ctx.lineTo(20 - strideOffset, 46);
+            ctx.stroke();
+            ctx.restore();
+            powerUps.forEach(powerUp => powerUp.draw());
+            obstacles.forEach(obstacle => obstacle.draw());
+        }
+
+        function showGameOver() {
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOverScreen').style.display = 'block';
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        updateHud();
+        gameLoop();
+    </script>
 </body>
 </html>
