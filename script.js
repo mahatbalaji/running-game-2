@@ -91,28 +91,15 @@ window.addEventListener('keyup', (e) => {
 // Obstacle class
 class Obstacle {
     constructor() {
-        const obstacleType = Math.floor(Math.random() * 3);
-        this.type = obstacleType;
-        this.x = canvas.width;
+        this.x = canvas.width + Math.random() * 200;
         this.y = canvas.height - 60;
-        
-        // Random obstacle shapes and sizes
-        if (this.type === 0) {
-            // Small box
-            this.width = 20;
-            this.height = 30;
-            this.color = '#ff6b6b';
-        } else if (this.type === 1) {
-            // Tall box
-            this.width = 15;
-            this.height = 50;
-            this.color = '#ff8787';
-        } else {
-            // Wide box
-            this.width = 40;
-            this.height = 20;
-            this.color = '#ff4444';
-        }
+
+        // Random obstacle width and height
+        this.width = getRandomInt(18, 48);
+        this.height = getRandomInt(20, 58);
+
+        const palette = ['#929090', '#afbd1785', '#ff4444', '#ff0303', '#0d1955', '#23e48d'];
+        this.color = palette[Math.floor(Math.random() * palette.length)];
 
         this.scored = false;
     }
@@ -134,6 +121,11 @@ class Obstacle {
     isOffScreen() {
         return this.x + this.width < 0;
     }
+}
+
+// Utility: random integer between min and max
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 // Check collision
@@ -158,21 +150,25 @@ function updateScore(points) {
 
 // Spawn obstacles
 function spawnObstacle() {
+    if (obstacles.length >= 3) return;
     obstacles.push(new Obstacle());
 }
 
 let spawnTimer = 0;
-const spawnInterval = 100;
+const spawnIntervalMin = 70;
+const spawnIntervalMax = 140;
+let nextSpawnInterval = getRandomInt(spawnIntervalMin, spawnIntervalMax);
 
 // Main update function
 function update() {
     if (!gameRunning) return;
 
-    // Spawn obstacles
+    // Spawn obstacles with randomized timing and a cap on active obstacles
     spawnTimer++;
-    if (spawnTimer > spawnInterval) {
+    if (spawnTimer > nextSpawnInterval) {
         spawnObstacle();
         spawnTimer = 0;
+        nextSpawnInterval = getRandomInt(spawnIntervalMin, spawnIntervalMax);
     }
 
     // Update player
@@ -283,10 +279,11 @@ function draw() {
     ctx.arc(14, 10.5, 3.5, 0.15, 0.95 * Math.PI);
     ctx.stroke();
 
-    ctx.strokeStyle = '#2d6cdf';
-    ctx.lineWidth = 4;
     ctx.lineCap = 'round';
 
+    // Arms match the face color and appear a bit thicker
+    ctx.strokeStyle = '#f4b183';
+    ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(14, 18);
     ctx.lineTo(6, 24);
@@ -297,14 +294,17 @@ function draw() {
     ctx.lineTo(22, 24);
     ctx.stroke();
 
+    // Legs are black with a longer stride
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.moveTo(14, 31);
-    ctx.lineTo(8 + strideOffset, 42);
+    ctx.lineTo(8 + strideOffset, 46);
     ctx.stroke();
 
     ctx.beginPath();
     ctx.moveTo(14, 31);
-    ctx.lineTo(20 - strideOffset, 42);
+    ctx.lineTo(20 - strideOffset, 46);
     ctx.stroke();
 
     ctx.restore();
